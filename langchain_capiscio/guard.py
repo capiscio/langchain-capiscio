@@ -86,8 +86,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
 
         if config is not None:
             self._config = config
-        else:
-            self._config = self._make_config(mode)
+        # else: _config stays None — created lazily in _ensure_initialized()
 
         if identity is not None:
             self._identity = identity
@@ -123,17 +122,27 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
     def _ensure_initialized(self) -> None:
         """Lazy initialization — calls CapiscIO.connect() on first use."""
         if self._initialized:
+            # Still need to create config lazily if it was deferred
+            if self._config is None:
+                self._config = self._make_config(self.mode)
             return
 
-        from capiscio_sdk import CapiscIO
-
-        connect_kwargs: dict[str, Any] = {}
+        # Check API key first (before importing SDK) so configuration errors
+        # are reported clearly even when the SDK is not available.
         api_key = self.api_key or os.environ.get("CAPISCIO_API_KEY")
         if not api_key:
             raise CapiscioConfigError(
                 "No API key provided. Set CAPISCIO_API_KEY env var"
                 " or pass api_key= to CapiscioGuard."
             )
+
+        from capiscio_sdk import CapiscIO
+
+        # Create SecurityConfig lazily (avoids importing SDK at __init__ time)
+        if self._config is None:
+            self._config = self._make_config(self.mode)
+
+        connect_kwargs: dict[str, Any] = {}
 
         if self.name:
             connect_kwargs["name"] = self.name
@@ -193,8 +202,6 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
 
     def _verify_and_enforce(self, input: dict, badge_token: str, fail_mode: str) -> dict:
         """Verify the badge token and enforce policy."""
-        from capiscio_sdk.errors import VerificationError
-
         try:
             claims = self._guard.verify_inbound(badge_token)
             logger.debug("CapiscioGuard: verification succeeded, issuer=%s", claims.get("iss"))
@@ -203,7 +210,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
                 "capiscio_verified": True,
                 "capiscio_claims": claims,
             }
-        except VerificationError as e:
+        except Exception as e:
             return self._handle_verification_failure(input, fail_mode, str(e))
 
     def _handle_verification_failure(self, input: dict, fail_mode: str, error: str) -> dict:
