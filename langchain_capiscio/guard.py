@@ -119,12 +119,16 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         if keeper is not None and guard is not None:
             keeper.on_renew = lambda token: guard.set_badge_token(token)
 
+    @property
+    def _fail_mode(self) -> str:
+        """Derive enforcement fail_mode from config (if set) or mode string."""
+        if self._config is not None:
+            return self._config.fail_mode
+        return {"block": "block", "monitor": "monitor", "log": "warn"}.get(self.mode, "block")
+
     def _ensure_initialized(self) -> None:
         """Lazy initialization — calls CapiscIO.connect() on first use."""
         if self._initialized:
-            # Still need to create config lazily if it was deferred
-            if self._config is None:
-                self._config = self._make_config(self.mode)
             return
 
         # Check API key first (before importing SDK) so configuration errors
@@ -170,7 +174,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         self._ensure_initialized()
 
         badge_token = extract_badge_token(input, config)
-        fail_mode = self._config.fail_mode if self._config else "block"
+        fail_mode = self._fail_mode
 
         if badge_token is None:
             return self._handle_missing_badge(input, fail_mode)
