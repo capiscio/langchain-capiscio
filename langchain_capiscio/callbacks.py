@@ -59,13 +59,15 @@ class CapiscioCallbackHandler(BaseCallbackHandler):
 
     def on_chain_start(
         self,
-        serialized: dict[str, Any],
+        serialized: dict[str, Any] | None,
         inputs: dict[str, Any],
         *,
         run_id: UUID,
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> None:
+        if serialized is None:
+            serialized = {}
         chain_name = serialized.get("name", serialized.get("id", ["unknown"])[-1])
         self._emit(
             "task_started",
@@ -105,14 +107,14 @@ class CapiscioCallbackHandler(BaseCallbackHandler):
 
     def on_tool_start(
         self,
-        serialized: dict[str, Any],
+        serialized: dict[str, Any] | None,
         input_str: str,
         *,
         run_id: UUID,
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> None:
-        tool_name = serialized.get("name", "unknown")
+        tool_name = (serialized or {}).get("name", "unknown")
         self._emit(
             "tool_call",
             {"tool": tool_name, "run_id": str(run_id)},

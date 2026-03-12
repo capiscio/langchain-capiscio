@@ -10,7 +10,6 @@ import asyncio
 import functools
 import inspect
 import logging
-import os
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
@@ -60,6 +59,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
     _identity: Any = PrivateAttr(default=None)
     _guard: Any = PrivateAttr(default=None)
     _config: Any = PrivateAttr(default=None)
+    _connect_kwargs: dict[str, Any] = PrivateAttr(default_factory=dict)
     _initialized: bool = PrivateAttr(default=False)
 
     def __init__(
@@ -71,11 +71,14 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         api_key: str | None = None,
         name: str | None = None,
         server_url: str | None = None,
+        connect_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         super().__init__(mode=mode, api_key=api_key, name=name, server_url=server_url, **kwargs)
         if mode not in ("block", "monitor", "log"):
             raise CapiscioConfigError(f"Invalid mode '{mode}'. Must be one of: block, monitor, log")
+
+        self._connect_kwargs = connect_kwargs or {}
 
         if config is not None:
             self._config = config
@@ -86,6 +89,20 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
             self._guard = getattr(identity, "_guard", None)
             self._wire_badge_renewal(identity)
             self._initialized = True
+
+    @classmethod
+    def from_env(cls, *, mode: str = "block", **kwargs: Any) -> CapiscioGuard:
+        """Create a CapiscioGuard using environment variables for configuration.
+
+        Reads CAPISCIO_API_KEY, CAPISCIO_SERVER_URL, CAPISCIO_AGENT_NAME,
+        and CAPISCIO_DEV_MODE from the environment. Mirrors the ``from_env()``
+        pattern used by ``CapiscIO.from_env()`` and
+        ``MCPServerIdentity.from_env()``.
+
+        Any explicit keyword arguments are forwarded to the constructor and
+        take precedence over environment variables.
+        """
+        return cls(mode=mode, **kwargs)
 
     @staticmethod
     def _make_config(mode: str) -> Any:
@@ -120,18 +137,13 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         return {"block": "block", "monitor": "monitor", "log": "warn"}.get(self.mode, "block")
 
     def _ensure_initialized(self) -> None:
-        """Lazy initialization — calls CapiscIO.connect() on first use."""
+        """Lazy initialization — connects to CapiscIO registry on first use.
+
+        Reads CAPISCIO_API_KEY, CAPISCIO_SERVER_URL, CAPISCIO_AGENT_NAME,
+        and CAPISCIO_DEV_MODE from environment when not set explicitly.
+        """
         if self._initialized:
             return
-
-        # Check API key first (before importing SDK) so configuration errors
-        # are reported clearly even when the SDK is not available.
-        api_key = self.api_key or os.environ.get("CAPISCIO_API_KEY")
-        if not api_key:
-            raise CapiscioConfigError(
-                "No API key provided. Set CAPISCIO_API_KEY env var"
-                " or pass api_key= to CapiscioGuard."
-            )
 
         from capiscio_sdk import CapiscIO
 
@@ -139,14 +151,38 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         if self._config is None:
             self._config = self._make_config(self.mode)
 
-        connect_kwargs: dict[str, Any] = {}
+        import os
+
+        # Build kwargs: explicit params > connect_kwargs > env vars > SDK defaults
+        kwargs: dict[str, Any] = {**self._connect_kwargs}
 
         if self.name:
-            connect_kwargs["name"] = self.name
-        if self.server_url:
-            connect_kwargs["server_url"] = self.server_url
+            kwargs["name"] = self.name
+        elif "name" not in kwargs:
+            env_name = os.environ.get("CAPISCIO_AGENT_NAME")
+            if env_name:
+                kwargs["name"] = env_name
 
-        self._identity = CapiscIO.connect(api_key, **connect_kwargs)
+        if self.server_url:
+            kwargs["server_url"] = self.server_url
+        elif "server_url" not in kwargs:
+            env_url = os.environ.get("CAPISCIO_SERVER_URL")
+            if env_url:
+                kwargs["server_url"] = env_url
+
+        if "dev_mode" not in kwargs:
+            env_dev = os.environ.get("CAPISCIO_DEV_MODE", "")
+            if env_dev.lower() in ("true", "1", "yes"):
+                kwargs["dev_mode"] = True
+
+        api_key = self.api_key or os.environ.get("CAPISCIO_API_KEY")
+        if not api_key:
+            raise CapiscioConfigError(
+                "No API key provided. Set CAPISCIO_API_KEY env var"
+                " or pass api_key= to CapiscioGuard."
+            )
+
+        self._identity = CapiscIO.connect(api_key, **kwargs)
         self._guard = getattr(self._identity, "_guard", None)
         self._wire_badge_renewal(self._identity)
         self._initialized = True

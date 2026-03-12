@@ -106,13 +106,17 @@ class TestCapiscioGuardInit:
 
     def test_no_api_key_raises_on_lazy_init(self):
         import os
+        import sys
+        from unittest.mock import MagicMock, patch
 
         old = os.environ.pop("CAPISCIO_API_KEY", None)
         try:
             guard = CapiscioGuard.__new__(CapiscioGuard)
             CapiscioGuard.__init__(guard, mode="block")
-            with pytest.raises(CapiscioConfigError, match="No API key"):
-                guard._ensure_initialized()
+            # Mock SDK so test doesn't depend on protobuf stubs being installed
+            with patch.dict(sys.modules, {"capiscio_sdk": MagicMock()}):
+                with pytest.raises(CapiscioConfigError, match="No API key"):
+                    guard._ensure_initialized()
         finally:
             if old is not None:
                 os.environ["CAPISCIO_API_KEY"] = old
