@@ -1,9 +1,9 @@
 """langchain-capiscio — Trust enforcement adapter for LangChain and LangGraph.
 
-    from langchain_capiscio import CapiscioGuard
+from langchain_capiscio import CapiscioGuard
 
-    secured = CapiscioGuard() | my_chain
-    result = secured.invoke({"input": "..."})
+secured = CapiscioGuard() | my_chain
+result = secured.invoke({"input": "..."})
 """
 
 from langchain_capiscio._context import (

@@ -177,24 +177,18 @@ class TestCapiscioGuardInvoke:
 
     def test_verification_failure_monitor_mode(self):
         guard = _make_guard(mode="monitor", should_fail=True)
-        result = guard._handle_verification_failure(
-            {"input": "test"}, "monitor", "expired"
-        )
+        result = guard._handle_verification_failure({"input": "test"}, "monitor", "expired")
         assert result["capiscio_verified"] is False
         assert "expired" in result["capiscio_warnings"][0]
 
     def test_verification_failure_log_mode(self):
         guard = _make_guard(mode="log", should_fail=True)
-        result = guard._handle_verification_failure(
-            {"input": "test"}, "log", "expired"
-        )
+        result = guard._handle_verification_failure({"input": "test"}, "log", "expired")
         assert result["capiscio_verified"] is False
 
     def test_passthrough_preserves_input_keys(self):
         guard = _make_guard(mode="block")
-        result = guard.invoke(
-            {"input": "test", "extra_key": 42, "capiscio_badge": "tok"}
-        )
+        result = guard.invoke({"input": "test", "extra_key": 42, "capiscio_badge": "tok"})
         assert result["input"] == "test"
         assert result["extra_key"] == 42
         assert result["capiscio_verified"] is True

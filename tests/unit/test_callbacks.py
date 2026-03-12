@@ -24,9 +24,7 @@ class TestCapiscioCallbackHandler:
         handler = CapiscioCallbackHandler(emitter=emitter)
         run_id = uuid4()
 
-        handler.on_chain_start(
-            {"name": "MyChain"}, {"input": "test"}, run_id=run_id
-        )
+        handler.on_chain_start({"name": "MyChain"}, {"input": "test"}, run_id=run_id)
 
         assert len(emitter.events) == 1
         event_type, data, kwargs = emitter.events[0]
@@ -63,9 +61,7 @@ class TestCapiscioCallbackHandler:
         run_id = uuid4()
         parent_id = uuid4()
 
-        handler.on_tool_start(
-            {"name": "search"}, "query", run_id=run_id, parent_run_id=parent_id
-        )
+        handler.on_tool_start({"name": "search"}, "query", run_id=run_id, parent_run_id=parent_id)
 
         assert len(emitter.events) == 1
         event_type, data, kwargs = emitter.events[0]
@@ -109,9 +105,7 @@ class TestCapiscioCallbackHandler:
         handler = CapiscioCallbackHandler(emitter=emitter)
         run_id = uuid4()
 
-        handler.on_chain_start(
-            {"id": ["langchain", "MyChain"]}, {"input": "test"}, run_id=run_id
-        )
+        handler.on_chain_start({"id": ["langchain", "MyChain"]}, {"input": "test"}, run_id=run_id)
 
         _, data, _ = emitter.events[0]
         assert data["chain"] == "MyChain"

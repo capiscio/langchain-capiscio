@@ -82,9 +82,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
     ):
         super().__init__(mode=mode, api_key=api_key, name=name, server_url=server_url, **kwargs)
         if mode not in ("block", "monitor", "log"):
-            raise CapiscioConfigError(
-                f"Invalid mode '{mode}'. Must be one of: block, monitor, log"
-            )
+            raise CapiscioConfigError(f"Invalid mode '{mode}'. Must be one of: block, monitor, log")
 
         if config is not None:
             self._config = config
@@ -171,7 +169,10 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         return self._verify_and_enforce(input, badge_token, fail_mode)
 
     async def ainvoke(
-        self, input: dict, config: RunnableConfig | None = None, **kwargs: Any,
+        self,
+        input: dict,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
     ) -> dict:
         """Async verification — offloads sync gRPC call to thread pool."""
         return await asyncio.to_thread(self.invoke, input, config)
@@ -190,9 +191,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
             "capiscio_warnings": [msg],
         }
 
-    def _verify_and_enforce(
-        self, input: dict, badge_token: str, fail_mode: str
-    ) -> dict:
+    def _verify_and_enforce(self, input: dict, badge_token: str, fail_mode: str) -> dict:
         """Verify the badge token and enforce policy."""
         from capiscio_sdk.errors import VerificationError
 
@@ -207,9 +206,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         except VerificationError as e:
             return self._handle_verification_failure(input, fail_mode, str(e))
 
-    def _handle_verification_failure(
-        self, input: dict, fail_mode: str, error: str
-    ) -> dict:
+    def _handle_verification_failure(self, input: dict, fail_mode: str, error: str) -> dict:
         """Apply enforcement policy after a verification failure."""
         msg = f"Badge verification failed: {error}"
 
@@ -241,9 +238,7 @@ class CapiscioTool:
         api_key: str | None = None,
     ):
         self._tool = tool
-        self._guard = CapiscioGuard(
-            identity=identity, config=config, mode=mode, api_key=api_key
-        )
+        self._guard = CapiscioGuard(identity=identity, config=config, mode=mode, api_key=api_key)
 
         # Preserve tool metadata
         self.name = getattr(tool, "name", "unknown")
