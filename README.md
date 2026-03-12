@@ -1,13 +1,14 @@
-# langchain-capiscio
+# CapiscIO LangChain Guard
 
-Trust enforcement adapter for [LangChain](https://python.langchain.com/) and
-[LangGraph](https://langchain-ai.github.io/langgraph/) — powered by
-[CapiscIO](https://capisc.io).
+Trust enforcement for LangChain and LangGraph agents.
 
-Verify agent trust badges, enforce security policies, and emit audit events —
-all composable via LangChain's LCEL pipe (`|`) operator.
+[![PyPI version](https://badge.fury.io/py/langchain-capiscio.svg)](https://badge.fury.io/py/langchain-capiscio)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## Install
+**LangChain Guard** is the CapiscIO trust enforcement adapter for [LangChain](https://python.langchain.com/) and [LangGraph](https://langchain-ai.github.io/langgraph/). It verifies caller trust badges, enforces security policies, and emits audit events — all composable via LangChain's LCEL pipe (`|`) operator with **zero configuration**.
+
+## Installation
 
 ```bash
 pip install langchain-capiscio
@@ -15,33 +16,76 @@ pip install langchain-capiscio
 
 ## Quick Start
 
+Turn any LangChain agent into a trust-verified agent in 2 lines:
+
 ```python
 from langchain_capiscio import CapiscioGuard
 
-# Guard before chain execution — reads CAPISCIO_API_KEY from env
+# Zero-config — reads CAPISCIO_API_KEY from env, connects to registry
 secured = CapiscioGuard() | my_chain
 result = secured.invoke({"input": "Summarize this ticket"})
 ```
 
-## Features
+`CapiscioGuard` reads your environment, connects to the CapiscIO registry on first use, and verifies caller trust badges before every invocation.
 
-- **CapiscioGuard** — `Runnable[dict, dict]` that verifies trust badges before
-  downstream execution. Composable with `|`.
-- **CapiscioTool** — Enforce trust before individual tool calls.
-- **CapiscioCallbackHandler** — Audit trail via CapiscIO EventEmitter.
-- **@capiscio_guard** — Decorator for LangGraph function-based nodes.
+## Why LangChain Guard?
+
+LangChain agents orchestrate powerful tools — search, databases, code execution. But LangChain itself doesn't define how to:
+
+- **Authenticate** which agent is calling your chain
+- **Authorize** whether that agent meets your trust requirements
+- **Audit** what happened for post-incident review
+
+LangChain Guard solves this with:
+
+| Feature | Description |
+|---------|-------------|
+| **`CapiscioGuard`** | `Runnable[dict, dict]` — verifies trust badges before downstream execution. Composable with `\|`. |
+| **`CapiscioTool`** | Wraps a LangChain `Tool` with trust enforcement at the tool-call boundary. |
+| **`CapiscioCallbackHandler`** | Audit trail — emits chain/tool lifecycle events to the CapiscIO EventEmitter. |
+| **`@capiscio_guard`** | Decorator for LangGraph function-based nodes. |
+| **`verify_badge` / `resolve_agent_card`** | Convenience `@tool`-decorated functions for agent-driven trust checks. |
 
 ## Enforcement Modes
 
-```python
-from langchain_capiscio import CapiscioGuard
+Control enforcement behavior per guard instance:
 
+```python
 guard = CapiscioGuard(mode="block")    # Fail closed (production default)
 guard = CapiscioGuard(mode="monitor")  # Warn but continue
 guard = CapiscioGuard(mode="log")      # Log only
 ```
 
-## LangGraph
+## LCEL Pipe Composition
+
+`CapiscioGuard` is a LangChain `Runnable` — compose it with any chain or agent via the `|` operator:
+
+```python
+from langchain_capiscio import CapiscioGuard
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(llm, tools)
+secured = CapiscioGuard(mode="log") | agent
+result = secured.invoke({"input": "What's 42 * 17?"})
+```
+
+## Callback Handler
+
+Emit structured audit events (task lifecycle, tool calls) to the CapiscIO dashboard:
+
+```python
+from langchain_capiscio import CapiscioCallbackHandler
+
+handler = CapiscioCallbackHandler(emitter=my_event_emitter)
+result = chain.invoke(
+    {"input": "..."},
+    config={"callbacks": [handler]},
+)
+```
+
+Events emitted: `task_started`, `task_completed`, `task_failed`, `tool_call`, `tool_result`.
+
+## LangGraph Integration
 
 ```python
 from langchain_capiscio import CapiscioGuard, capiscio_guard
@@ -55,6 +99,174 @@ def call_agent(state: dict) -> dict:
     ...
 ```
 
+## "Let's Encrypt" Style Setup
+
+### Zero-config (recommended)
+
+Set environment variables and create a guard with no arguments:
+
+```bash
+export CAPISCIO_API_KEY="cap_..."
+export CAPISCIO_SERVER_URL="https://dev.registry.capisc.io"  # optional
+export CAPISCIO_AGENT_NAME="my-agent"                        # optional
+export CAPISCIO_DEV_MODE="true"                              # optional
+```
+
+```python
+guard = CapiscioGuard()  # reads env vars, connects on first invoke()
+```
+
+### Explicit configuration
+
+```python
+guard = CapiscioGuard(
+    mode="block",
+    api_key="cap_...",
+    name="my-agent",
+    server_url="https://dev.registry.capisc.io",
+)
+```
+
+### `connect_kwargs`
+
+Pass extra keyword arguments through to `CapiscIO.connect()`:
+
+```python
+guard = CapiscioGuard(
+    mode="log",
+    connect_kwargs={
+        "dev_mode": True,
+        "keys_dir": "capiscio_keys/",
+        "agent_card": my_card_dict,
+    },
+)
+```
+
+## Using Environment Variables
+
+`CapiscioGuard.from_env()` mirrors the `CapiscIO.from_env()` / `MCPServerIdentity.from_env()` pattern used across CapiscIO packages:
+
+```python
+guard = CapiscioGuard.from_env(mode="log")
+```
+
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `CAPISCIO_API_KEY` | Yes* | Registry API key | — |
+| `CAPISCIO_SERVER_URL` | No | Registry URL override | `https://registry.capisc.io` |
+| `CAPISCIO_AGENT_NAME` | No | Agent name for registration | — |
+| `CAPISCIO_DEV_MODE` | No | Enable dev mode (`true`/`1`/`yes`) | `false` |
+
+*Required if not passed explicitly via constructor.
+
+Priority: explicit constructor args > `connect_kwargs` > env vars > SDK defaults.
+
+## Deploying to Containers / Serverless
+
+In ephemeral environments, set env vars and use zero-config:
+
+```yaml
+# docker-compose.yml
+services:
+  langchain-agent:
+    image: my-langchain-agent
+    environment:
+      CAPISCIO_API_KEY: ${CAPISCIO_API_KEY}
+      CAPISCIO_DEV_MODE: "false"
+```
+
+```python
+# No code changes needed — CapiscioGuard reads env vars automatically
+secured = CapiscioGuard(mode="block") | my_agent
+```
+
+> **Tip:** Use `connect_kwargs={"keys_dir": "/tmp/capiscio_keys"}` if the container filesystem is read-only in the default location.
+
+## Badge Token Extraction
+
+`CapiscioGuard` extracts the caller's badge token from (in priority order):
+
+1. **Context variable** — set by A2A server middleware via `set_capiscio_context()`
+2. **RunnableConfig** — `config={"configurable": {"capiscio_badge": token}}`
+3. **Input dict** — `{"capiscio_badge": token, ...}`
+
+For A2A server integrations, set the context at the HTTP perimeter:
+
+```python
+from langchain_capiscio import CapiscioRequestContext, set_capiscio_context
+
+set_capiscio_context(CapiscioRequestContext(
+    badge_token=badge_jwt,
+    caller_did="did:web:caller.example.com",
+))
+```
+
+## Trust Levels
+
+| Level | Name | Description |
+|-------|------|-------------|
+| 0 | Self-Signed (SS) | No external validation, `did:key` issuer |
+| 1 | Domain Validated (DV) | Domain ownership verified |
+| 2 | Organization Validated (OV) | Organization identity verified |
+| 3 | Extended Validated (EV) | Highest level of identity verification |
+| 4 | Community Vouched (CV) | Verified with peer attestations |
+
+## API Reference
+
+### Guard
+
+- `CapiscioGuard(mode, api_key, name, server_url, connect_kwargs, identity, config)` — LCEL-composable trust enforcement Runnable
+- `CapiscioGuard.invoke(input, config)` — Verify badge and pass through to downstream
+- `CapiscioGuard.ainvoke(input, config)` — Async version
+- `CapiscioGuard.from_env(mode, **kwargs)` — Create guard from environment variables
+
+### Callbacks
+
+- `CapiscioCallbackHandler(emitter, identity)` — Emit chain/tool lifecycle events to CapiscIO
+
+### Tool Enforcement
+
+- `CapiscioTool(tool, mode, identity, api_key)` — Wrap a LangChain `Tool` with trust enforcement
+- `verify_badge` — `@tool`-decorated function for agent-driven badge verification
+- `resolve_agent_card` — `@tool`-decorated function for agent card resolution
+
+### LangGraph
+
+- `@capiscio_guard(mode, identity, config, api_key)` — Decorator for LangGraph function-based nodes
+
+### Context
+
+- `set_capiscio_context(ctx)` — Set request context (badge token, caller DID) for the current invocation
+- `get_capiscio_context()` — Retrieve current request context
+- `CapiscioRequestContext` — Dataclass holding badge token and caller DID
+
+## Documentation
+
+- [LangChain Integration Guide](https://docs.capisc.io/how-to/integrations/langchain/)
+- [Trust Badges Overview](https://docs.capisc.io/concepts/trust-badges/)
+- [A2A Protocol](https://github.com/google/A2A)
+
+## Development
+
+```bash
+# Clone repository
+git clone https://github.com/capiscio/capiscio-langchain.git
+cd capiscio-langchain
+
+# Install development dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest -v
+
+# Run tests with coverage
+pytest --cov=langchain_capiscio --cov-report=html
+```
+
 ## License
 
-Apache-2.0
+Apache License 2.0
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
