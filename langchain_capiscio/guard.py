@@ -20,13 +20,6 @@ from langchain_capiscio._context import extract_badge_token
 
 logger = logging.getLogger(__name__)
 
-# Mode-to-SecurityConfig mapping (lazy import to avoid import-time SDK dependency)
-_MODE_MAP = {
-    "block": "production",
-    "monitor": None,  # custom
-    "log": "development",
-}
-
 
 class CapiscioTrustError(Exception):
     """Raised when trust verification fails in block mode."""
@@ -164,7 +157,7 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         self._ensure_initialized()
         return self._identity
 
-    def invoke(self, input: dict, config: RunnableConfig | None = None) -> dict:
+    def invoke(self, input: dict, config: RunnableConfig | None = None, **kwargs: Any) -> dict:
         """Verify trust badge and pass through with injected verification metadata.
 
         On success: returns input with capiscio_verified=True and capiscio_claims.
@@ -197,7 +190,8 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         if fail_mode == "block":
             raise CapiscioTrustError(msg)
 
-        logger.warning("CapiscioGuard: %s (mode=%s, continuing)", msg, fail_mode)
+        log = logger.info if fail_mode == "warn" else logger.warning
+        log("CapiscioGuard: %s (mode=%s, continuing)", msg, fail_mode)
         return {
             **input,
             "capiscio_verified": False,
@@ -224,7 +218,8 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         if fail_mode == "block":
             raise CapiscioTrustError(msg)
 
-        logger.warning("CapiscioGuard: %s (mode=%s, continuing)", msg, fail_mode)
+        log = logger.info if fail_mode == "warn" else logger.warning
+        log("CapiscioGuard: %s (mode=%s, continuing)", msg, fail_mode)
         return {
             **input,
             "capiscio_verified": False,
@@ -255,17 +250,17 @@ class CapiscioTool:
         self.name = getattr(tool, "name", "unknown")
         self.description = getattr(tool, "description", "")
 
-    def invoke(self, input: Any, config: RunnableConfig | None = None) -> Any:
+    def invoke(self, input: Any, config: RunnableConfig | None = None, **kwargs: Any) -> Any:
         """Verify trust, then execute the wrapped tool."""
         tool_input = input if isinstance(input, dict) else {"input": input}
         self._guard.invoke(tool_input, config)
-        return self._tool.invoke(input, config)
+        return self._tool.invoke(input, config, **kwargs)
 
     async def ainvoke(self, input: Any, config: RunnableConfig | None = None, **kwargs: Any) -> Any:
         """Async verify trust, then execute the wrapped tool."""
         tool_input = input if isinstance(input, dict) else {"input": input}
         await self._guard.ainvoke(tool_input, config)
-        return await self._tool.ainvoke(input, config)
+        return await self._tool.ainvoke(input, config, **kwargs)
 
 
 def capiscio_guard(
@@ -286,17 +281,28 @@ def capiscio_guard(
     guard = CapiscioGuard(identity=identity, config=config, mode=mode, api_key=api_key)
 
     def decorator(fn):
+        sig = inspect.signature(fn)
+        _accepts_config = "config" in sig.parameters or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        )
+
         @functools.wraps(fn)
         def wrapper(state: dict, config: RunnableConfig | None = None) -> dict:
             guard.invoke(state, config)
-            return fn(state) if config is None else fn(state, config)
+            if config is not None and _accepts_config:
+                return fn(state, config=config)
+            return fn(state)
 
         @functools.wraps(fn)
         async def async_wrapper(state: dict, config: RunnableConfig | None = None) -> dict:
             await guard.ainvoke(state, config)
             if inspect.iscoroutinefunction(fn):
-                return await fn(state) if config is None else await fn(state, config)
-            return fn(state) if config is None else fn(state, config)
+                if config is not None and _accepts_config:
+                    return await fn(state, config=config)
+                return await fn(state)
+            if config is not None and _accepts_config:
+                return fn(state, config=config)
+            return fn(state)
 
         if inspect.iscoroutinefunction(fn):
             return async_wrapper

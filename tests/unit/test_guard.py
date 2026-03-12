@@ -165,11 +165,6 @@ class TestCapiscioGuardInvoke:
         result = guard.invoke({"input": "test"})
         assert result["capiscio_verified"] is True
 
-    def test_verification_failure_block_mode_raises_via_handler(self):
-        guard = _make_guard(mode="block", should_fail=True, error_msg="expired")
-        with pytest.raises(CapiscioTrustError, match="expired"):
-            guard._handle_verification_failure({"input": "test"}, "block", "expired")
-
     def test_verification_failure_block_mode_raises(self):
         guard = _make_guard(mode="block", should_fail=True, error_msg="expired")
         with pytest.raises(CapiscioTrustError, match="expired"):
