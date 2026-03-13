@@ -11,6 +11,7 @@ import pytest
 from langchain_capiscio._context import (
     CapiscioRequestContext,
     clear_capiscio_context,
+    get_capiscio_context,
     set_capiscio_context,
 )
 from langchain_capiscio.guard import (
@@ -139,35 +140,52 @@ class TestCapiscioGuardInvoke:
 
     def test_monitor_mode_no_badge_passes_with_warning(self):
         guard = _make_guard(mode="monitor")
-        result = guard.invoke({"input": "test"})
-        assert result["capiscio_verified"] is False
-        assert "No badge token" in result["capiscio_warnings"][0]
-        assert result["input"] == "test"
+        original = {"input": "test"}
+        result = guard.invoke(original)
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is False
+        assert "No badge token" in ctx.warnings[0]
 
     def test_log_mode_no_badge_passes_with_warning(self):
         guard = _make_guard(mode="log")
-        result = guard.invoke({"input": "test"})
-        assert result["capiscio_verified"] is False
+        original = {"input": "test"}
+        result = guard.invoke(original)
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is False
 
     def test_successful_verification_from_input(self):
         guard = _make_guard(mode="block")
-        result = guard.invoke({"input": "test", "capiscio_badge": "valid_token"})
-        assert result["capiscio_verified"] is True
-        assert result["capiscio_claims"]["iss"] == "did:web:issuer.com"
-        assert result["input"] == "test"
+        original = {"input": "test", "capiscio_badge": "valid_token"}
+        result = guard.invoke(original)
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is True
+        assert ctx.claims["iss"] == "did:web:issuer.com"
 
     def test_successful_verification_from_config(self):
         guard = _make_guard(mode="block")
         config = {"configurable": {"capiscio_badge": "valid_token"}}
-        result = guard.invoke({"input": "test"}, config=config)
-        assert result["capiscio_verified"] is True
+        original = {"input": "test"}
+        result = guard.invoke(original, config=config)
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is True
 
     def test_successful_verification_from_contextvar(self):
         guard = _make_guard(mode="block")
-        ctx = CapiscioRequestContext(badge_token="valid_token")
-        set_capiscio_context(ctx)
-        result = guard.invoke({"input": "test"})
-        assert result["capiscio_verified"] is True
+        set_capiscio_context(CapiscioRequestContext(badge_token="valid_token"))
+        original = {"input": "test"}
+        result = guard.invoke(original)
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is True
 
     def test_verification_failure_block_mode_raises(self):
         guard = _make_guard(mode="block", should_fail=True, error_msg="expired")
@@ -176,21 +194,43 @@ class TestCapiscioGuardInvoke:
 
     def test_verification_failure_monitor_mode(self):
         guard = _make_guard(mode="monitor", should_fail=True)
-        result = guard._handle_verification_failure({"input": "test"}, "monitor", "expired")
-        assert result["capiscio_verified"] is False
-        assert "expired" in result["capiscio_warnings"][0]
+        original = {"input": "test"}
+        result = guard._handle_verification_failure(original, "monitor", "expired")
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is False
+        assert "expired" in ctx.warnings[0]
 
     def test_verification_failure_log_mode(self):
         guard = _make_guard(mode="log", should_fail=True)
-        result = guard._handle_verification_failure({"input": "test"}, "log", "expired")
-        assert result["capiscio_verified"] is False
+        original = {"input": "test"}
+        result = guard._handle_verification_failure(original, "log", "expired")
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is False
 
     def test_passthrough_preserves_input_keys(self):
         guard = _make_guard(mode="block")
-        result = guard.invoke({"input": "test", "extra_key": 42, "capiscio_badge": "tok"})
+        original = {"input": "test", "extra_key": 42, "capiscio_badge": "tok"}
+        result = guard.invoke(original)
+        assert result is original
         assert result["input"] == "test"
         assert result["extra_key"] == 42
-        assert result["capiscio_verified"] is True
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is True
+
+    def test_string_passthrough_with_badge_in_config(self):
+        guard = _make_guard(mode="block")
+        config = {"configurable": {"capiscio_badge": "valid_token"}}
+        result = guard.invoke("Summarise quarterly earnings", config=config)
+        assert result == "Summarise quarterly earnings"
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is True
+        assert ctx.claims["iss"] == "did:web:issuer.com"
 
 
 # ---- Async tests ----
@@ -206,8 +246,12 @@ class TestCapiscioGuardAsync:
     @pytest.mark.asyncio
     async def test_ainvoke_success(self):
         guard = _make_guard(mode="block")
-        result = await guard.ainvoke({"input": "test", "capiscio_badge": "tok"})
-        assert result["capiscio_verified"] is True
+        original = {"input": "test", "capiscio_badge": "tok"}
+        result = await guard.ainvoke(original)
+        assert result is original
+        ctx = get_capiscio_context()
+        assert ctx is not None
+        assert ctx.verified is True
 
     @pytest.mark.asyncio
     async def test_ainvoke_block_no_badge(self):

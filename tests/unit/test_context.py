@@ -100,6 +100,8 @@ class TestCapiscioRequestContext:
         ctx = CapiscioRequestContext(badge_token="tok")
         assert ctx.caller_did is None
         assert ctx.claims is None
+        assert ctx.verified is False
+        assert ctx.warnings is None
 
     def test_context_is_frozen(self):
         ctx = CapiscioRequestContext(badge_token="tok")
