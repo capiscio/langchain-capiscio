@@ -22,6 +22,8 @@ from langchain_capiscio._context import (
     set_capiscio_context,
 )
 
+Other = TypeVar("Other")
+
 logger = logging.getLogger(__name__)
 
 
