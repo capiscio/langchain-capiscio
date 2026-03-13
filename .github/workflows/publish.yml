@@ -108,6 +108,6 @@ jobs:
 
             ---
 
-            **Full Changelog**: https://github.com/capiscio/capiscio-langchain/compare/${{ github.event.before }}...${{ github.ref_name }}
+            **Full Changelog**: https://github.com/capiscio/langchain-capiscio/compare/${{ github.event.before }}...${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -250,8 +250,8 @@ set_capiscio_context(CapiscioRequestContext(
 
 ```bash
 # Clone repository
-git clone https://github.com/capiscio/capiscio-langchain.git
-cd capiscio-langchain
+git clone https://github.com/capiscio/langchain-capiscio.git
+cd langchain-capiscio
 
 # Install development dependencies
 pip install -e ".[dev]"
