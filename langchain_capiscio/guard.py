@@ -261,9 +261,13 @@ class CapiscioGuard(RunnableSerializable):
             claims = self._guard.verify_inbound(badge_token)
             logger.debug("CapiscioGuard: verification succeeded, issuer=%s", claims.get("iss"))
 
-            set_capiscio_context(CapiscioRequestContext(
-                badge_token=badge_token, claims=claims, verified=True,
-            ))
+            set_capiscio_context(
+                CapiscioRequestContext(
+                    badge_token=badge_token,
+                    claims=claims,
+                    verified=True,
+                )
+            )
             return input
         except Exception as e:
             return self._handle_verification_failure(input, fail_mode, str(e))
