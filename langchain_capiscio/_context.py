@@ -21,11 +21,17 @@ _capiscio_context: ContextVar[CapiscioRequestContext | None] = ContextVar(
 
 @dataclass(frozen=True)
 class CapiscioRequestContext:
-    """Verified request context set by perimeter middleware."""
+    """Request trust context populated by CapiscioGuard or perimeter middleware.
 
-    badge_token: str
+    After CapiscioGuard runs, downstream runnables can inspect this via
+    ``get_capiscio_context()`` to check verification status and claims.
+    """
+
+    badge_token: str | None = None
     caller_did: str | None = None
     claims: dict[str, Any] | None = None
+    verified: bool = False
+    warnings: list[str] | None = None
 
 
 def set_capiscio_context(ctx: CapiscioRequestContext) -> None:

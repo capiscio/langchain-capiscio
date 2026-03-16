@@ -1,9 +1,10 @@
 """langchain-capiscio — Trust enforcement adapter for LangChain and LangGraph.
 
 from langchain_capiscio import CapiscioGuard
+from langchain_openai import ChatOpenAI
 
-secured = CapiscioGuard() | my_chain
-result = secured.invoke({"input": "..."})
+secured = CapiscioGuard() | ChatOpenAI()
+result = secured.invoke("Summarise quarterly earnings")
 """
 
 from langchain_capiscio._context import (

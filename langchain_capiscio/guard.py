@@ -10,12 +10,19 @@ import asyncio
 import functools
 import inspect
 import logging
-from typing import Any
+from typing import Any, TypeVar
 
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from pydantic import ConfigDict, Field, PrivateAttr
 
-from langchain_capiscio._context import extract_badge_token
+from langchain_capiscio._context import (
+    CapiscioRequestContext,
+    extract_badge_token,
+    get_capiscio_context,
+    set_capiscio_context,
+)
+
+Other = TypeVar("Other")
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +39,22 @@ class CapiscioConfigError(Exception):
     """Raised for configuration errors during guard setup."""
 
 
-class CapiscioGuard(RunnableSerializable[dict, dict]):
+class CapiscioGuard(RunnableSerializable):
     """Runnable that verifies CapiscIO trust badges before downstream execution.
 
     Composes with any LangChain Runnable via the pipe operator:
 
         secured = CapiscioGuard() | my_chain
-        result = secured.invoke({"input": "..."})
+        result = secured.invoke("Summarise quarterly earnings")
+
+    When used in a pipe, acts as a transparent guard: verifies the badge and
+    passes input through unchanged so downstream runnables (e.g. ChatOpenAI)
+    receive the original input type.
 
     Badge token is extracted from (in priority order):
     1. Context variable (set by A2A server perimeter middleware)
     2. RunnableConfig configurable["capiscio_badge"]
-    3. Input dict key "capiscio_badge"
+    3. Input dict key "capiscio_badge" (when input is a dict)
     """
 
     mode: str = Field(default="block", description="Enforcement mode: block, monitor, or log")
@@ -193,16 +204,20 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
         self._ensure_initialized()
         return self._identity
 
-    def invoke(self, input: dict, config: RunnableConfig | None = None, **kwargs: Any) -> dict:
-        """Verify trust badge and pass through with injected verification metadata.
+    def invoke(self, input: Other, config: RunnableConfig | None = None, **kwargs: Any) -> Other:
+        """Verify trust badge and store result in request context.
 
-        On success: returns input with capiscio_verified=True and capiscio_claims.
+        Acts as a transparent guard in LCEL pipes — the downstream runnable
+        receives exactly the same input, unchanged.  Verification results
+        are available via ``get_capiscio_context()``.
+
         On block failure: raises CapiscioTrustError.
-        On monitor/log failure: returns input with capiscio_verified=False and capiscio_warnings.
+        On monitor/log failure: passes input through with context warnings.
         """
         self._ensure_initialized()
 
-        badge_token = extract_badge_token(input, config)
+        input_for_extraction = input if isinstance(input, dict) else {}
+        badge_token = extract_badge_token(input_for_extraction, config)
         fail_mode = self._fail_mode
 
         if badge_token is None:
@@ -212,14 +227,22 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
 
     async def ainvoke(
         self,
-        input: dict,
+        input: Other,
         config: RunnableConfig | None = None,
         **kwargs: Any,
-    ) -> dict:
+    ) -> Other:
         """Async verification — offloads sync gRPC call to thread pool."""
-        return await asyncio.to_thread(self.invoke, input, config)
 
-    def _handle_missing_badge(self, input: dict, fail_mode: str) -> dict:
+        def _run():
+            result = self.invoke(input, config)
+            return result, get_capiscio_context()
+
+        result, ctx = await asyncio.to_thread(_run)
+        if ctx is not None:
+            set_capiscio_context(ctx)
+        return result
+
+    def _handle_missing_badge(self, input: Other, fail_mode: str) -> Other:
         """Handle case where no badge token is found."""
         msg = "No badge token found in context, config, or input"
 
@@ -228,26 +251,28 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
 
         log = logger.info if fail_mode == "warn" else logger.warning
         log("CapiscioGuard: %s (mode=%s, continuing)", msg, fail_mode)
-        return {
-            **input,
-            "capiscio_verified": False,
-            "capiscio_warnings": [msg],
-        }
 
-    def _verify_and_enforce(self, input: dict, badge_token: str, fail_mode: str) -> dict:
+        set_capiscio_context(CapiscioRequestContext(verified=False, warnings=[msg]))
+        return input
+
+    def _verify_and_enforce(self, input: Other, badge_token: str, fail_mode: str) -> Other:
         """Verify the badge token and enforce policy."""
         try:
             claims = self._guard.verify_inbound(badge_token)
             logger.debug("CapiscioGuard: verification succeeded, issuer=%s", claims.get("iss"))
-            return {
-                **input,
-                "capiscio_verified": True,
-                "capiscio_claims": claims,
-            }
+
+            set_capiscio_context(
+                CapiscioRequestContext(
+                    badge_token=badge_token,
+                    claims=claims,
+                    verified=True,
+                )
+            )
+            return input
         except Exception as e:
             return self._handle_verification_failure(input, fail_mode, str(e))
 
-    def _handle_verification_failure(self, input: dict, fail_mode: str, error: str) -> dict:
+    def _handle_verification_failure(self, input: Other, fail_mode: str, error: str) -> Other:
         """Apply enforcement policy after a verification failure."""
         msg = f"Badge verification failed: {error}"
 
@@ -256,11 +281,9 @@ class CapiscioGuard(RunnableSerializable[dict, dict]):
 
         log = logger.info if fail_mode == "warn" else logger.warning
         log("CapiscioGuard: %s (mode=%s, continuing)", msg, fail_mode)
-        return {
-            **input,
-            "capiscio_verified": False,
-            "capiscio_warnings": [msg],
-        }
+
+        set_capiscio_context(CapiscioRequestContext(verified=False, warnings=[msg]))
+        return input
 
 
 class CapiscioTool:
