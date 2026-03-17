@@ -156,6 +156,7 @@ guard = CapiscioGuard.from_env(mode="log")
 | `CAPISCIO_SERVER_URL` | No | Registry URL override | `https://registry.capisc.io` |
 | `CAPISCIO_AGENT_NAME` | No | Agent name for registration | — |
 | `CAPISCIO_DEV_MODE` | No | Enable dev mode (`true`/`1`/`yes`) | `false` |
+| `CAPISCIO_AGENT_PRIVATE_KEY_JWK` | No | JSON-encoded Ed25519 private JWK for ephemeral environments | — |
 
 *Required if not passed explicitly via constructor.
 
@@ -163,7 +164,26 @@ Priority: explicit constructor args > `connect_kwargs` > env vars > SDK defaults
 
 ## Deploying to Containers / Serverless
 
-In ephemeral environments, set env vars and use zero-config:
+In ephemeral environments (Docker, Lambda, Cloud Run) the local `~/.capiscio/keys/` directory doesn't survive restarts. Without a persisted key, the SDK generates a **new keypair on every start**, which means a new DID and invalidated badges.
+
+### Key Persistence via Environment Variable
+
+On first run the SDK generates a keypair and logs a capture hint:
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║  New agent identity generated — save key for persistence         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+  Add to your secrets manager / .env:
+
+    CAPISCIO_AGENT_PRIVATE_KEY_JWK='{"kty":"OKP","crv":"Ed25519","d":"...","x":"...","kid":"did:key:z6Mk..."}'
+```
+
+Copy that value into your secrets manager and set it as an environment variable.
+On subsequent starts the SDK recovers the same DID without generating a new identity.
+
+**Key resolution priority:** env var → local file → generate new.
 
 ```yaml
 # docker-compose.yml
@@ -172,6 +192,7 @@ services:
     image: my-langchain-agent
     environment:
       CAPISCIO_API_KEY: ${CAPISCIO_API_KEY}
+      CAPISCIO_AGENT_PRIVATE_KEY_JWK: ${AGENT_KEY_JWK}  # from secrets manager
       CAPISCIO_DEV_MODE: "false"
 ```
 
@@ -180,7 +201,9 @@ services:
 secured = CapiscioGuard(mode="block") | my_agent
 ```
 
-> **Tip:** Use `connect_kwargs={"keys_dir": "/tmp/capiscio_keys"}` if the container filesystem is read-only in the default location.
+> **Warning:** Never bake private keys into container images. Inject them at runtime via environment variables or mounted secrets.
+
+See the [Ephemeral Deployment Guide](https://docs.capisc.io/how-to/security/ephemeral-deployment/) for secrets manager examples and volume-mount alternatives.
 
 ## Badge Token Extraction
 
@@ -206,10 +229,10 @@ set_capiscio_context(CapiscioRequestContext(
 | Level | Name | Description |
 |-------|------|-------------|
 | 0 | Self-Signed (SS) | No external validation, `did:key` issuer |
-| 1 | Domain Validated (DV) | Domain ownership verified |
-| 2 | Organization Validated (OV) | Organization identity verified |
-| 3 | Extended Validated (EV) | Highest level of identity verification |
-| 4 | Community Vouched (CV) | Verified with peer attestations |
+| 1 | Registered (REG) | Account registration with CapiscIO Registry |
+| 2 | Domain Validated (DV) | Domain ownership verified via DNS/HTTP challenge |
+| 3 | Organization Validated (OV) | Organization existence verified (DUNS, legal entity) |
+| 4 | Extended Validated (EV) | Manual review + legal agreement with CapiscIO |
 
 ## API Reference
 
