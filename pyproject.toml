@@ -33,7 +33,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://capisc.io"
 Repository = "https://github.com/capiscio/langchain-capiscio"
-Documentation = "https://docs.capisc.io/integrations/langchain"
+Documentation = "https://docs.capisc.io/how-to/integrations/langchain/"
 Issues = "https://github.com/capiscio/langchain-capiscio/issues"
 
 [tool.hatch.build.targets.wheel]
