@@ -60,6 +60,9 @@ guard = CapiscioGuard(mode="log")      # Log only
 
 `CapiscioGuard` is a LangChain `Runnable` — compose it with any chain or agent via the `|` operator:
 
+> **Note**: The example below uses [LangGraph](https://langchain-ai.github.io/langgraph/).
+> Install it separately: `pip install langgraph`
+
 ```python
 from langchain_capiscio import CapiscioGuard
 from langgraph.prebuilt import create_react_agent
@@ -249,7 +252,7 @@ set_capiscio_context(CapiscioRequestContext(
 
 ### Tool Enforcement
 
-- `CapiscioTool(tool, mode, identity, api_key)` — Wrap a LangChain `Tool` with trust enforcement
+- `CapiscioTool(tool, *, identity=None, config=None, mode="block", api_key=None)` — Wrap a LangChain `Tool` with trust enforcement
 - `verify_badge` — `@tool`-decorated function for agent-driven badge verification
 - `resolve_agent_card` — `@tool`-decorated function for agent card resolution
 
@@ -292,4 +295,4 @@ Apache License 2.0
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! Please open an issue or pull request on [GitHub](https://github.com/capiscio/langchain-capiscio).
