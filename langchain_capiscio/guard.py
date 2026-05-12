@@ -106,9 +106,9 @@ class CapiscioGuard(RunnableSerializable):
         """Create a CapiscioGuard using environment variables for configuration.
 
         Reads CAPISCIO_API_KEY, CAPISCIO_SERVER_URL, CAPISCIO_AGENT_NAME,
-        and CAPISCIO_DEV_MODE from the environment. Mirrors the ``from_env()``
-        pattern used by ``CapiscIO.from_env()`` and
-        ``MCPServerIdentity.from_env()``.
+        and CAPISCIO_DEV_MODE from the environment. Mirrors the ``connect()``
+        pattern used by ``CapiscIO.connect()`` and
+        ``CapiscioMCPServer.connect()``.
 
         Any explicit keyword arguments are forwarded to the constructor and
         take precedence over environment variables.
