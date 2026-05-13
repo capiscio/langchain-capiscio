@@ -147,7 +147,7 @@ guard = CapiscioGuard(
 
 ## Using Environment Variables
 
-`CapiscioGuard.from_env()` mirrors the `CapiscIO.connect()` / `CapiscioMCPServer.connect()` pattern used across CapiscIO packages:
+`CapiscioGuard.from_env()` configures the guard from environment variables, consistent with the env-var conventions used across CapiscIO packages:
 
 ```python
 guard = CapiscioGuard.from_env(mode="log")
