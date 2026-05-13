@@ -3,7 +3,7 @@
 from langchain_capiscio import CapiscioGuard
 from langchain_openai import ChatOpenAI
 
-secured = CapiscioGuard() | ChatOpenAI()
+secured = CapiscioGuard.connect() | ChatOpenAI()
 result = secured.invoke("Summarise quarterly earnings")
 """
 
