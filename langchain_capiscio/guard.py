@@ -103,12 +103,11 @@ class CapiscioGuard(RunnableSerializable):
 
     @classmethod
     def from_env(cls, *, mode: str = "block", **kwargs: Any) -> CapiscioGuard:
-        """Create a CapiscioGuard using environment variables for configuration.
+        """Create a CapiscioGuard that will use environment variables.
 
-        Reads CAPISCIO_API_KEY, CAPISCIO_SERVER_URL, CAPISCIO_AGENT_NAME,
-        and CAPISCIO_DEV_MODE from the environment. Mirrors the ``connect()``
-        pattern used by ``CapiscIO.connect()`` and
-        ``CapiscioMCPServer.connect()``.
+        Environment variables (CAPISCIO_API_KEY, CAPISCIO_SERVER_URL,
+        CAPISCIO_AGENT_NAME, CAPISCIO_DEV_MODE) are resolved lazily on
+        first use, not at construction time.
 
         Any explicit keyword arguments are forwarded to the constructor and
         take precedence over environment variables.
