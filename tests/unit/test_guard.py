@@ -199,7 +199,8 @@ class TestCapiscioGuardConnect:
             guard = CapiscioGuard.connect(api_key="cap_test", dev_mode=True)
 
         mock_sdk.CapiscIO.connect.assert_called_once_with(
-            "cap_test", dev_mode=True,
+            "cap_test",
+            dev_mode=True,
         )
         assert guard._initialized is True
 
@@ -244,7 +245,8 @@ class TestCapiscioGuardConnect:
                 os.environ.pop("CAPISCIO_DEV_MODE", None)
 
         mock_sdk.CapiscIO.connect.assert_called_once_with(
-            "cap_test", dev_mode=True,
+            "cap_test",
+            dev_mode=True,
         )
 
     def test_from_env_delegates_to_connect(self):
