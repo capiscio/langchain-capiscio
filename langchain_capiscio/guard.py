@@ -102,18 +102,99 @@ class CapiscioGuard(RunnableSerializable):
             self._initialized = True
 
     @classmethod
-    def from_env(cls, *, mode: str = "block", **kwargs: Any) -> CapiscioGuard:
-        """Create a CapiscioGuard using environment variables for configuration.
+    def connect(
+        cls,
+        api_key: str | None = None,
+        *,
+        mode: str = "block",
+        name: str | None = None,
+        server_url: str | None = None,
+        dev_mode: bool | None = None,
+        **kwargs: Any,
+    ) -> CapiscioGuard:
+        """Connect to CapiscIO and return a ready-to-use guard.
 
-        Reads CAPISCIO_API_KEY, CAPISCIO_SERVER_URL, CAPISCIO_AGENT_NAME,
-        and CAPISCIO_DEV_MODE from the environment. Mirrors the ``from_env()``
-        pattern used by ``CapiscIO.from_env()`` and
-        ``MCPServerIdentity.from_env()``.
+        This is the recommended entry point — consistent with
+        ``CapiscIO.connect()`` and ``CapiscioMCPServer.connect()``
+        across the CapiscIO ecosystem.
 
-        Any explicit keyword arguments are forwarded to the constructor and
-        take precedence over environment variables.
+        Eagerly connects to the registry so errors surface immediately
+        rather than on first ``invoke()``.
+
+        Args:
+            api_key: Registry API key.  Falls back to ``CAPISCIO_API_KEY``
+                env var when ``None``.
+            mode: Enforcement mode — ``"block"``, ``"monitor"``, or ``"log"``.
+            name: Agent name for registration.  Falls back to
+                ``CAPISCIO_AGENT_NAME`` env var.
+            server_url: Registry URL override.  Falls back to
+                ``CAPISCIO_SERVER_URL`` env var.
+            dev_mode: Enable dev mode (relaxed validation).  When ``None``,
+                falls back to ``CAPISCIO_DEV_MODE`` env var.  Explicit
+                ``True``/``False`` overrides the env var.
+            **kwargs: Extra keyword arguments forwarded to
+                ``CapiscIO.connect()`` (e.g. ``keys_dir``, ``agent_card``).
+
+        Returns:
+            A fully-initialized ``CapiscioGuard`` ready for use in LCEL
+            pipes or as a standalone Runnable.
+
+        Raises:
+            CapiscioConfigError: If no API key is available.
+
+        Example::
+
+            guard = CapiscioGuard.connect(mode="block")
+            secured = guard | my_chain
         """
-        return cls(mode=mode, **kwargs)
+        import os
+
+        effective_api_key = api_key or os.environ.get("CAPISCIO_API_KEY")
+        if not effective_api_key:
+            raise CapiscioConfigError(
+                "No API key provided. Set CAPISCIO_API_KEY env var"
+                " or pass api_key= to CapiscioGuard.connect()."
+            )
+
+        from capiscio_sdk import CapiscIO
+
+        connect_kwargs: dict[str, Any] = {**kwargs}
+
+        effective_name = name or os.environ.get("CAPISCIO_AGENT_NAME")
+        if effective_name:
+            connect_kwargs["name"] = effective_name
+
+        effective_url = server_url or os.environ.get("CAPISCIO_SERVER_URL")
+        if effective_url:
+            connect_kwargs["server_url"] = effective_url
+
+        if dev_mode is None:
+            dev_mode = os.environ.get("CAPISCIO_DEV_MODE", "").lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        if dev_mode:
+            connect_kwargs["dev_mode"] = True
+
+        identity = CapiscIO.connect(effective_api_key, **connect_kwargs)
+        config = cls._make_config(mode)
+
+        return cls(identity=identity, config=config, mode=mode)
+
+    @classmethod
+    def from_env(cls, *, mode: str = "block", **kwargs: Any) -> CapiscioGuard:
+        """Create a guard from environment variables.
+
+        Convenience alias for ``CapiscioGuard.connect()`` — reads API key,
+        agent name, server URL, and dev mode from environment variables.
+        Explicit ``**kwargs`` override env vars when provided.
+
+        .. deprecated::
+            Prefer ``CapiscioGuard.connect()`` for consistency with the
+            rest of the CapiscIO ecosystem.
+        """
+        return cls.connect(mode=mode, **kwargs)
 
     @staticmethod
     def _make_config(mode: str) -> Any:

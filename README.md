@@ -21,12 +21,12 @@ Turn any LangChain agent into a trust-verified agent in 2 lines:
 ```python
 from langchain_capiscio import CapiscioGuard
 
-# Zero-config — reads CAPISCIO_API_KEY from env, connects to registry
-secured = CapiscioGuard() | my_chain
+# Reads CAPISCIO_API_KEY from env, connects to registry
+secured = CapiscioGuard.connect() | my_chain
 result = secured.invoke({"input": "Summarize this ticket"})
 ```
 
-`CapiscioGuard` reads your environment, connects to the CapiscIO registry on first use, and verifies caller trust badges before every invocation.
+`CapiscioGuard.connect()` reads your environment, connects to the CapiscIO registry, and returns a guard that verifies caller trust badges before every invocation — consistent with `CapiscIO.connect()` and `CapiscioMCPServer.connect()` across the ecosystem.
 
 ## Why LangChain Guard?
 
@@ -51,9 +51,9 @@ LangChain Guard solves this with:
 Control enforcement behavior per guard instance:
 
 ```python
-guard = CapiscioGuard(mode="block")    # Fail closed (production default)
-guard = CapiscioGuard(mode="monitor")  # Warn but continue
-guard = CapiscioGuard(mode="log")      # Log only
+guard = CapiscioGuard.connect(mode="block")    # Fail closed (production default)
+guard = CapiscioGuard.connect(mode="monitor")  # Warn but continue
+guard = CapiscioGuard.connect(mode="log")      # Log only
 ```
 
 ## LCEL Pipe Composition
@@ -68,7 +68,7 @@ from langchain_capiscio import CapiscioGuard
 from langgraph.prebuilt import create_react_agent
 
 agent = create_react_agent(llm, tools)
-secured = CapiscioGuard(mode="log") | agent
+secured = CapiscioGuard.connect(mode="log") | agent
 result = secured.invoke({"input": "What's 42 * 17?"})
 ```
 
@@ -94,7 +94,7 @@ Events emitted: `task_started`, `task_completed`, `task_failed`, `tool_call`, `t
 from langchain_capiscio import CapiscioGuard, capiscio_guard
 
 # Option 1: Runnable as graph node
-graph.add_node("verify", CapiscioGuard())
+graph.add_node("verify", CapiscioGuard.connect())
 
 # Option 2: Decorator
 @capiscio_guard(mode="block")
@@ -106,7 +106,7 @@ def call_agent(state: dict) -> dict:
 
 ### Zero-config (recommended)
 
-Set environment variables and create a guard with no arguments:
+Set environment variables and connect with no arguments:
 
 ```bash
 export CAPISCIO_API_KEY="cap_..."
@@ -116,41 +116,39 @@ export CAPISCIO_DEV_MODE="true"                              # optional
 ```
 
 ```python
-guard = CapiscioGuard()  # reads env vars, connects on first invoke()
+guard = CapiscioGuard.connect()  # reads env vars, connects eagerly
 ```
 
 ### Explicit configuration
 
 ```python
-guard = CapiscioGuard(
-    mode="block",
+guard = CapiscioGuard.connect(
     api_key="cap_...",
+    mode="block",
     name="my-agent",
     server_url="https://dev.registry.capisc.io",
 )
 ```
 
-### `connect_kwargs`
+### Extra connect kwargs
 
-Pass extra keyword arguments through to `CapiscIO.connect()`:
+Pass additional keyword arguments through to `CapiscIO.connect()`:
 
 ```python
-guard = CapiscioGuard(
+guard = CapiscioGuard.connect(
     mode="log",
-    connect_kwargs={
-        "dev_mode": True,
-        "keys_dir": "capiscio_keys/",
-        "agent_card": my_card_dict,
-    },
+    dev_mode=True,
+    keys_dir="capiscio_keys/",
+    agent_card=my_card_dict,
 )
 ```
 
 ## Using Environment Variables
 
-`CapiscioGuard.from_env()` mirrors the `CapiscIO.from_env()` / `MCPServerIdentity.from_env()` pattern used across CapiscIO packages:
+`CapiscioGuard.connect()` reads environment variables automatically. `from_env()` is kept as a convenience alias:
 
 ```python
-guard = CapiscioGuard.from_env(mode="log")
+guard = CapiscioGuard.connect(mode="log")
 ```
 
 | Variable | Required | Description | Default |
@@ -200,8 +198,8 @@ services:
 ```
 
 ```python
-# No code changes needed — CapiscioGuard reads env vars automatically
-secured = CapiscioGuard(mode="block") | my_agent
+# No code changes needed — CapiscioGuard.connect() reads env vars automatically
+secured = CapiscioGuard.connect(mode="block") | my_agent
 ```
 
 > **Warning:** Never bake private keys into container images. Inject them at runtime via environment variables or mounted secrets.
@@ -241,10 +239,11 @@ set_capiscio_context(CapiscioRequestContext(
 
 ### Guard
 
-- `CapiscioGuard(mode, api_key, name, server_url, connect_kwargs, identity, config)` — LCEL-composable trust enforcement Runnable
+- `CapiscioGuard.connect(api_key, *, mode, name, server_url, dev_mode, **kwargs)` — Connect to registry and return a ready-to-use guard (recommended)
+- `CapiscioGuard.from_env(mode, **kwargs)` — Alias for `connect()` (reads env vars)
+- `CapiscioGuard(*, identity, config, mode, api_key, name, server_url, connect_kwargs)` — Low-level constructor (keyword-only, lazy init on first invoke)
 - `CapiscioGuard.invoke(input, config)` — Verify badge and pass through to downstream
 - `CapiscioGuard.ainvoke(input, config)` — Async version
-- `CapiscioGuard.from_env(mode, **kwargs)` — Create guard from environment variables
 
 ### Callbacks
 
