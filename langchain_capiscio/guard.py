@@ -109,7 +109,7 @@ class CapiscioGuard(RunnableSerializable):
         mode: str = "block",
         name: str | None = None,
         server_url: str | None = None,
-        dev_mode: bool = False,
+        dev_mode: bool | None = None,
         **kwargs: Any,
     ) -> CapiscioGuard:
         """Connect to CapiscIO and return a ready-to-use guard.
@@ -129,7 +129,9 @@ class CapiscioGuard(RunnableSerializable):
                 ``CAPISCIO_AGENT_NAME`` env var.
             server_url: Registry URL override.  Falls back to
                 ``CAPISCIO_SERVER_URL`` env var.
-            dev_mode: Enable dev mode (relaxed validation).
+            dev_mode: Enable dev mode (relaxed validation).  When ``None``,
+                falls back to ``CAPISCIO_DEV_MODE`` env var.  Explicit
+                ``True``/``False`` overrides the env var.
             **kwargs: Extra keyword arguments forwarded to
                 ``CapiscIO.connect()`` (e.g. ``keys_dir``, ``agent_card``).
 
@@ -166,11 +168,13 @@ class CapiscioGuard(RunnableSerializable):
         if effective_url:
             connect_kwargs["server_url"] = effective_url
 
-        if dev_mode or os.environ.get("CAPISCIO_DEV_MODE", "").lower() in (
-            "true",
-            "1",
-            "yes",
-        ):
+        if dev_mode is None:
+            dev_mode = os.environ.get("CAPISCIO_DEV_MODE", "").lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+        if dev_mode:
             connect_kwargs["dev_mode"] = True
 
         identity = CapiscIO.connect(effective_api_key, **connect_kwargs)
@@ -182,8 +186,9 @@ class CapiscioGuard(RunnableSerializable):
     def from_env(cls, *, mode: str = "block", **kwargs: Any) -> CapiscioGuard:
         """Create a guard from environment variables.
 
-        Convenience alias for ``CapiscioGuard.connect()`` — all parameters
-        are read from environment variables.
+        Convenience alias for ``CapiscioGuard.connect()`` — reads API key,
+        agent name, server URL, and dev mode from environment variables.
+        Explicit ``**kwargs`` override env vars when provided.
 
         .. deprecated::
             Prefer ``CapiscioGuard.connect()`` for consistency with the

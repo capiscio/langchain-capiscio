@@ -241,7 +241,7 @@ set_capiscio_context(CapiscioRequestContext(
 
 - `CapiscioGuard.connect(api_key, *, mode, name, server_url, dev_mode, **kwargs)` — Connect to registry and return a ready-to-use guard (recommended)
 - `CapiscioGuard.from_env(mode, **kwargs)` — Alias for `connect()` (reads env vars)
-- `CapiscioGuard(mode, api_key, name, server_url, identity, config)` — Low-level constructor (lazy init on first invoke)
+- `CapiscioGuard(*, identity, config, mode, api_key, name, server_url, connect_kwargs)` — Low-level constructor (keyword-only, lazy init on first invoke)
 - `CapiscioGuard.invoke(input, config)` — Verify badge and pass through to downstream
 - `CapiscioGuard.ainvoke(input, config)` — Async version
 

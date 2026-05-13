@@ -141,16 +141,14 @@ class TestCapiscioGuardConnect:
         mock_sdk.CapiscIO.connect.return_value = fake_identity
         mock_sdk.SecurityConfig.production.return_value = FakeConfig("block")
 
-        old_key = os.environ.get("CAPISCIO_API_KEY")
-        os.environ["CAPISCIO_API_KEY"] = "cap_test_key"
-        try:
+        env = {"CAPISCIO_API_KEY": "cap_test_key"}
+        with patch.dict(os.environ, env, clear=False):
+            # Clear other CAPISCIO_ vars that could leak from the runner
+            os.environ.pop("CAPISCIO_AGENT_NAME", None)
+            os.environ.pop("CAPISCIO_SERVER_URL", None)
+            os.environ.pop("CAPISCIO_DEV_MODE", None)
             with patch.dict(sys.modules, {"capiscio_sdk": mock_sdk}):
                 guard = CapiscioGuard.connect()
-        finally:
-            if old_key is not None:
-                os.environ["CAPISCIO_API_KEY"] = old_key
-            else:
-                os.environ.pop("CAPISCIO_API_KEY", None)
 
         assert guard._initialized is True
         assert guard.mode == "block"
@@ -158,6 +156,7 @@ class TestCapiscioGuardConnect:
 
     def test_connect_explicit_params(self):
         """Explicit params should be forwarded to CapiscIO.connect()."""
+        import os
         import sys
         from unittest.mock import MagicMock, patch
 
@@ -169,13 +168,22 @@ class TestCapiscioGuardConnect:
         mock_sdk.CapiscIO.connect.return_value = fake_identity
         mock_sdk.SecurityConfig.development.return_value = FakeConfig("warn")
 
-        with patch.dict(sys.modules, {"capiscio_sdk": mock_sdk}):
-            guard = CapiscioGuard.connect(
-                api_key="cap_explicit",
-                mode="log",
-                name="my-agent",
-                server_url="https://dev.registry.capisc.io",
-            )
+        env = {
+            "CAPISCIO_AGENT_NAME": "",
+            "CAPISCIO_SERVER_URL": "",
+            "CAPISCIO_DEV_MODE": "",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            os.environ.pop("CAPISCIO_AGENT_NAME", None)
+            os.environ.pop("CAPISCIO_SERVER_URL", None)
+            os.environ.pop("CAPISCIO_DEV_MODE", None)
+            with patch.dict(sys.modules, {"capiscio_sdk": mock_sdk}):
+                guard = CapiscioGuard.connect(
+                    api_key="cap_explicit",
+                    mode="log",
+                    name="my-agent",
+                    server_url="https://dev.registry.capisc.io",
+                )
 
         assert guard._initialized is True
         assert guard.mode == "log"
@@ -227,27 +235,44 @@ class TestCapiscioGuardConnect:
         mock_sdk.CapiscIO.connect.return_value = fake_identity
         mock_sdk.SecurityConfig.production.return_value = FakeConfig("block")
 
-        old_key = os.environ.get("CAPISCIO_API_KEY")
-        old_dev = os.environ.get("CAPISCIO_DEV_MODE")
-        os.environ["CAPISCIO_API_KEY"] = "cap_test"
-        os.environ["CAPISCIO_DEV_MODE"] = "true"
-        try:
+        env = {
+            "CAPISCIO_API_KEY": "cap_test",
+            "CAPISCIO_DEV_MODE": "true",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            os.environ.pop("CAPISCIO_AGENT_NAME", None)
+            os.environ.pop("CAPISCIO_SERVER_URL", None)
             with patch.dict(sys.modules, {"capiscio_sdk": mock_sdk}):
                 CapiscioGuard.connect()
-        finally:
-            if old_key is not None:
-                os.environ["CAPISCIO_API_KEY"] = old_key
-            else:
-                os.environ.pop("CAPISCIO_API_KEY", None)
-            if old_dev is not None:
-                os.environ["CAPISCIO_DEV_MODE"] = old_dev
-            else:
-                os.environ.pop("CAPISCIO_DEV_MODE", None)
 
         mock_sdk.CapiscIO.connect.assert_called_once_with(
             "cap_test",
             dev_mode=True,
         )
+
+    def test_connect_dev_mode_false_overrides_env(self):
+        """Explicit dev_mode=False should override CAPISCIO_DEV_MODE env var."""
+        import os
+        import sys
+        from unittest.mock import MagicMock, patch
+
+        fake_identity = FakeIdentity(_guard=FakeGuard(), _keeper=FakeKeeper())
+        mock_sdk = MagicMock()
+        mock_sdk.CapiscIO.connect.return_value = fake_identity
+        mock_sdk.SecurityConfig.production.return_value = FakeConfig("block")
+
+        env = {
+            "CAPISCIO_API_KEY": "cap_test",
+            "CAPISCIO_DEV_MODE": "true",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            os.environ.pop("CAPISCIO_AGENT_NAME", None)
+            os.environ.pop("CAPISCIO_SERVER_URL", None)
+            with patch.dict(sys.modules, {"capiscio_sdk": mock_sdk}):
+                CapiscioGuard.connect(dev_mode=False)
+
+        # dev_mode=False should NOT include dev_mode in connect kwargs
+        mock_sdk.CapiscIO.connect.assert_called_once_with("cap_test")
 
     def test_from_env_delegates_to_connect(self):
         """from_env() should delegate to connect()."""
