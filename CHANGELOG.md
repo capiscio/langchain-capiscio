@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-13
+
+### Changed
+- Pin `capiscio-sdk` dependency to `>=2.7.0` for RFC-008 authority envelope support
+- Update references to `CapiscioMCPServer.connect()` API (#10)
+
+### Fixed
+- API signature docs, pydantic dependency, URL corrections (#9)
+
 ## [0.1.0] - 2026-03-16
 
 ### Added
